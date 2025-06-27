@@ -45,7 +45,7 @@ def format_news_message(entry):
         time_str = dt_local.strftime("%H:%M")
         now = datetime.now(PRAGUE_TZ)
         if dt_local.date() != now.date():
-        continue
+            continue
     else:
         date_str = "Невідома дата"
         time_str = "??:??"
