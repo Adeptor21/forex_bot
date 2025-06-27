@@ -73,7 +73,13 @@ async def send_news(app):
     global sent_news_ids
     for feed_url in RSS_FEEDS:
         feed = feedparser.parse(feed_url)
-        for entry in feed.entries:
+        # Сортуємо від найстаріших до найновіших
+        sorted_entries = sorted(
+            feed.entries,
+            key=lambda e: e.get('published_parsed', (1970,1,1,0,0,0,0,0,0)),
+            reverse=False
+        )
+        for entry in sorted_entries:
             # Фільтрація по ключових словах у заголовку або описі
             text = (entry.get("title","") + " " + entry.get("summary","")).lower()
             if any(keyword in text for keyword in KEYWORDS):
