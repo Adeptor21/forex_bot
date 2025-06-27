@@ -2,3 +2,4 @@ python-telegram-bot==20.7
 requests
 beautifulsoup4
 feedparser==6.0.10
+pytz==2023.3
