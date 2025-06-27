@@ -6,7 +6,7 @@ import pytz
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = int(os.getenv("CHAT_ID"))
+CHAT_ID = 843629315
 
 # Джерела RSS (приклади)
 RSS_FEEDS = [
