@@ -43,6 +43,9 @@ def format_news_message(entry):
         dt_local = dt_utc.astimezone(PRAGUE_TZ)
         date_str = format_date(dt_local)
         time_str = dt_local.strftime("%H:%M")
+        now = datetime.now(PRAGUE_TZ)
+        if dt_local.date() != now.date():
+        continue
     else:
         date_str = "Невідома дата"
         time_str = "??:??"
