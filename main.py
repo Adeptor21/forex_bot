@@ -83,6 +83,13 @@ async def send_news(app):
             reverse=False
         )
         for entry in sorted_entries:
+            published_parsed = entry.get('published_parsed')
+            if published_parsed:
+                dt_utc = datetime(*published_parsed[:6], tzinfo=pytz.UTC)
+                dt_local = dt_utc.astimezone(PRAGUE_TZ)
+                now = datetime.now(PRAGUE_TZ)
+                if dt_local.date() != now.date():
+                    continue
             # Фільтрація по ключових словах у заголовку або описі
             text = (entry.get("title","") + " " + entry.get("summary","")).lower()
             if any(keyword in text for keyword in KEYWORDS):
