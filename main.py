@@ -1,82 +1,84 @@
 import os
-import asyncio
 import feedparser
 from datetime import datetime
 import pytz
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from deep_translator import GoogleTranslator
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = 843629315
+CHAT_ID = int(os.getenv("CHAT_ID"))
 
-# Джерела RSS (приклади)
 RSS_FEEDS = [
-    "https://www.forexfactory.com/ffcal-weekly.xml",      # ForexFactory календар
-    "https://www.investing.com/rss/news_25.rss",         # Investing.com Forex News
-    "https://www.dailyfx.com/feeds/all",                  # DailyFX RSS (загальний)
-    "https://www.fxstreet.com/rss/news",                  # FXStreet News RSS
-    "https://www.forexlive.com/rss",                      # Forexlive RSS
-    # Bloomberg немає відкритого RSS - треба парсити вручну або API
+    "https://www.fxstreet.com/rss/news",
+    "https://www.forexlive.com/feed",
+    "https://www.investing.com/rss/news_25.rss",
 ]
 
-# Ключові слова для фільтрації по EUR/USD
 KEYWORDS = [
-    "eurusd", "eur/usd", "usd", "euro", "eurozone", "us inflation", "fed", "ecb", "cpi", "interest rate",
-    "inflation", "usdollar", "usdollar index", "eur", "usd economic", "usd data"
+    "eurusd", "eur/usd", "usd", "euro", "eurozone", "us inflation", "fed", "ecb",
+    "cpi", "interest rate", "inflation", "eur", "usd economic", "usd data"
 ]
 
-# Часова зона Праги
 PRAGUE_TZ = pytz.timezone("Europe/Prague")
-
-# Збереження надісланих новин
 sent_news_ids = set()
 
-def format_date(date_obj):
-    return date_obj.strftime("%A, %d %B")
+def translate(text, to_lang="uk"):
+    try:
+        return GoogleTranslator(source='auto', target=to_lang).translate(text)
+    except Exception as e:
+        print(f"[!] Помилка перекладу: {e}")
+        return text
+
+def analyze_sentiment(text):
+    text = text.lower()
+    if any(w in text for w in ["rise", "gains", "bullish", "rally", "strengthens", "higher", "hawkish"]):
+        return "⬆️ Потенціал зростання"
+    elif any(w in text for w in ["fall", "weakens", "bearish", "drops", "lower", "dovish"]):
+        return "⬇️ Потенціал падіння"
+    else:
+        return "↔️ Нейтрально/невизначено"
+
+def impact_level(text):
+    if any(w in text for w in ["ECB", "FOMC", "CPI", "NFP", "interest rate", "inflation", "Fed"]):
+        return "🔴 Сильний вплив"
+    elif any(w in text for w in ["ISM", "PMI", "GDP", "jobless", "unemployment"]):
+        return "🟠 Середній вплив"
+    else:
+        return "🟢 Слабкий/новини"
 
 def format_news_message(entry):
-    # Припускаємо, що entry містить title, published, summary (або description), link
-    
-    # Перетворення дати в часовий пояс Праги
+    title = entry.get("title", "")
+    link = entry.get("link", "#")
+    translated_title = translate(title)
+
     published_parsed = entry.get('published_parsed')
     if published_parsed:
         dt_utc = datetime(*published_parsed[:6], tzinfo=pytz.UTC)
         dt_local = dt_utc.astimezone(PRAGUE_TZ)
-        date_str = format_date(dt_local)
-        time_str = dt_local.strftime("%H:%M")
         now = datetime.now(PRAGUE_TZ)
-        if dt_local.date() != now.date():
-            continue
+        time_diff = now - dt_local
+        hours_ago = int(time_diff.total_seconds() // 3600)
+        minutes_ago = int((time_diff.total_seconds() % 3600) // 60)
+        time_str = dt_local.strftime("%H:%M")
+        ago_str = f"{hours_ago} год {minutes_ago} хв тому" if hours_ago > 0 else f"{minutes_ago} хв тому"
     else:
-        date_str = "Невідома дата"
         time_str = "??:??"
-    
-    # Парсимо текст новини (summary або title) на предмет ключових даних — спрощено
-    title = entry.get("title", "")
-    summary = entry.get("summary", "")
-    
-    # Фіктивні поля, оскільки не всі RSS дають структуру
-    impact = "Високий"
-    potential = "50–90 піпсів"
-    scenario = "Якщо CPI нижче → USD падає → EUR/USD вгору"
-    
-    # Форматування повідомлення
-    message = (
-        f"📆 {date_str}\n\n"
-        f"💥 Важлива новина через 1 год:\n"
-        f"🇺🇸 {title}\n"
-        f"⏰ Час: {time_str} (за Прагой)\n"
-        f"📈 Прогноз: - | Попереднє: -\n\n"
-        f"🎯 Вплив на EUR/USD: {impact}\n"
-        f"⚖️ Потенціал руху: {potential}\n"
-        f"📌 Сценарій: {scenario}"
+        ago_str = "час невідомий"
+
+    impact = impact_level(title)
+    sentiment = analyze_sentiment(title)
+
+    return (
+        f"📰 {translated_title}\n"
+        f"🕒 {time_str} ({ago_str})\n"
+        f"{impact} | {sentiment}\n"
+        f"🔗 {link}"
     )
-    return message
 
 async def send_news(app):
     global sent_news_ids
     for feed_url in RSS_FEEDS:
         feed = feedparser.parse(feed_url)
-        # Сортуємо від найстаріших до найновіших
         sorted_entries = sorted(
             feed.entries,
             key=lambda e: e.get('published_parsed', (1970,1,1,0,0,0,0,0,0)),
@@ -88,10 +90,12 @@ async def send_news(app):
                 dt_utc = datetime(*published_parsed[:6], tzinfo=pytz.UTC)
                 dt_local = dt_utc.astimezone(PRAGUE_TZ)
                 now = datetime.now(PRAGUE_TZ)
+
+                # ⛔ Пропускаємо все, що не з сьогоднішнього дня
                 if dt_local.date() != now.date():
                     continue
-            # Фільтрація по ключових словах у заголовку або описі
-            text = (entry.get("title","") + " " + entry.get("summary","")).lower()
+
+            text = (entry.get("title", "") + " " + entry.get("summary", "")).lower()
             if any(keyword in text for keyword in KEYWORDS):
                 news_id = entry.get("id", entry.get("link"))
                 if news_id not in sent_news_ids:
@@ -100,15 +104,13 @@ async def send_news(app):
                     try:
                         await app.bot.send_message(chat_id=CHAT_ID, text=message)
                     except Exception as e:
-                        print(f"Помилка відправки новини: {e}")
+                        print(f"[!] Помилка надсилання: {e}")
 
 async def news_job(context: ContextTypes.DEFAULT_TYPE):
     await send_news(context.application)
 
 async def start(update, context):
-    await update.message.reply_text(
-        "Привіт! Я надсилатиму тобі важливі новини по EUR/USD кожні 30 хвилин."
-    )
+    await update.message.reply_text("👋 Привіт! Я надсилатиму сьогоднішні новини по EUR/USD українською.")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
