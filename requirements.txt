@@ -4,3 +4,4 @@ requests
 beautifulsoup4
 feedparser==6.0.10
 pytz==2023.3
+deep-translator==1.11.4
