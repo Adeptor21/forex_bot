@@ -4,39 +4,36 @@ import feedparser
 from datetime import datetime
 import pytz
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from deep_translator import GoogleTranslator
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = 843629315
+CHAT_ID = int(os.getenv("CHAT_ID"))
 
-# Джерела RSS (приклади)
 RSS_FEEDS = [
-    "https://www.forexfactory.com/ffcal-weekly.xml",      # ForexFactory календар
-    "https://www.investing.com/rss/news_25.rss",         # Investing.com Forex News
-    "https://www.dailyfx.com/feeds/all",                  # DailyFX RSS (загальний)
-    "https://www.fxstreet.com/rss/news",                  # FXStreet News RSS
-    "https://www.forexlive.com/rss",                      # Forexlive RSS
-    # Bloomberg немає відкритого RSS - треба парсити вручну або API
+    "https://www.fxstreet.com/rss/news",
+    "https://www.forexlive.com/feed",
+    "https://www.investing.com/rss/news_25.rss",
 ]
 
-# Ключові слова для фільтрації по EUR/USD
 KEYWORDS = [
-    "eurusd", "eur/usd", "usd", "euro", "eurozone", "us inflation", "fed", "ecb", "cpi", "interest rate",
-    "inflation", "usdollar", "usdollar index", "eur", "usd economic", "usd data"
+    "eurusd", "eur/usd", "usd", "euro", "eurozone", "us inflation", "fed", "ecb",
+    "cpi", "interest rate", "inflation", "eur", "usd economic", "usd data"
 ]
 
-# Часова зона Праги
 PRAGUE_TZ = pytz.timezone("Europe/Prague")
-
-# Збереження надісланих новин
 sent_news_ids = set()
+
+def translate(text, to_lang="uk"):
+    try:
+        return GoogleTranslator(source='auto', target=to_lang).translate(text)
+    except Exception as e:
+        print(f"Помилка перекладу: {e}")
+        return text  # fallback: повертаємо оригінал, якщо переклад не вдався
 
 def format_date(date_obj):
     return date_obj.strftime("%A, %d %B")
 
 def format_news_message(entry):
-    # Припускаємо, що entry містить title, published, summary (або description), link
-    
-    # Перетворення дати в часовий пояс Праги
     published_parsed = entry.get('published_parsed')
     if published_parsed:
         dt_utc = datetime(*published_parsed[:6], tzinfo=pytz.UTC)
@@ -46,26 +43,20 @@ def format_news_message(entry):
     else:
         date_str = "Невідома дата"
         time_str = "??:??"
-    
-    # Парсимо текст новини (summary або title) на предмет ключових даних — спрощено
+
     title = entry.get("title", "")
     summary = entry.get("summary", "")
-    
-    # Фіктивні поля, оскільки не всі RSS дають структуру
-    impact = "Високий"
-    potential = "50–90 піпсів"
-    scenario = "Якщо CPI нижче → USD падає → EUR/USD вгору"
-    
-    # Форматування повідомлення
+
+    # Переклад заголовку та короткого опису
+    title_ua = translate(title)
+    summary_ua = translate(summary)
+
     message = (
         f"📆 {date_str}\n\n"
-        f"💥 Важлива новина через 1 год:\n"
-        f"🇺🇸 {title}\n"
-        f"⏰ Час: {time_str} (за Прагой)\n"
-        f"📈 Прогноз: - | Попереднє: -\n\n"
-        f"🎯 Вплив на EUR/USD: {impact}\n"
-        f"⚖️ Потенціал руху: {potential}\n"
-        f"📌 Сценарій: {scenario}"
+        f"📰 {title_ua}\n\n"
+        f"🔍 {summary_ua}\n\n"
+        f"⏰ Час: {time_str} (за Прагою)\n"
+        f"🔗 [Читати повністю]({entry.get('link')})"
     )
     return message
 
@@ -74,29 +65,25 @@ async def send_news(app):
     for feed_url in RSS_FEEDS:
         feed = feedparser.parse(feed_url)
         for entry in feed.entries:
-            # Фільтрація по ключових словах у заголовку або описі
-            text = (entry.get("title","") + " " + entry.get("summary","")).lower()
+            text = (entry.get("title", "") + " " + entry.get("summary", "")).lower()
             if any(keyword in text for keyword in KEYWORDS):
                 news_id = entry.get("id", entry.get("link"))
                 if news_id not in sent_news_ids:
                     sent_news_ids.add(news_id)
                     message = format_news_message(entry)
                     try:
-                        await app.bot.send_message(chat_id=CHAT_ID, text=message)
+                        await app.bot.send_message(chat_id=CHAT_ID, text=message, parse_mode='Markdown')
                     except Exception as e:
-                        print(f"Помилка відправки новини: {e}")
+                        print(f"Помилка надсилання: {e}")
 
 async def news_job(context: ContextTypes.DEFAULT_TYPE):
     await send_news(context.application)
 
 async def start(update, context):
-    await update.message.reply_text(
-        "Привіт! Я надсилатиму тобі важливі новини по EUR/USD кожні 30 хвилин."
-    )
+    await update.message.reply_text("👋 Привіт! Я надсилатиму тобі новини по EUR/USD перекладені українською.")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.job_queue.run_repeating(news_job, interval=1800, first=10)
     app.run_polling()
-
