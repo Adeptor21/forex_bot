@@ -1,4 +1,5 @@
 import os
+print(f"Loaded bot token: {os.getenv('BOT_TOKEN')}")
 import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
