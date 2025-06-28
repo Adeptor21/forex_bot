@@ -12,6 +12,7 @@ RSS_FEEDS = [
     "https://www.fxstreet.com/rss/news",
     "https://www.forexlive.com/feed",
     "https://www.investing.com/rss/news_25.rss",
+    "https://www.instaforex.com/rss/calendar",
 ]
 
 KEYWORDS = [
