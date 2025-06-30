@@ -1,97 +1,73 @@
-import logging
-import os
+import telebot
 import requests
 from bs4 import BeautifulSoup
-from googletrans import Translator
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, JobQueue
+import schedule
+import time
+from datetime import datetime
 
-# Основна конфігурація
-BOT_TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN"
-CHAT_ID = 843629315
+# Встав свій токен нижче
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# Набір ID новин, щоб не повторювати повідомлення
-sent_news_ids = set()
-translator = Translator()
+# Встав свій chat_id нижче
+CHAT_ID = "YOUR_CHAT_ID"
 
-def extract_impact(text):
-    text = text.lower()
-    if any(word in text for word in ["high", "високий"]):
-        return "💥 Високий вплив"
-    elif any(word in text for word in ["medium", "середній"]):
-        return "⚠️ Середній вплив"
-    elif any(word in text for word in ["low", "низький"]):
-        return "📌 Низький вплив"
-    return "❔ Невідомий вплив"
-
-def extract_sentiment(text):
-    text = text.lower()
-    if any(word in text for word in ["bullish", "оптимістично"]):
-        return "📈 Позитивний прогноз"
-    elif any(word in text for word in ["bearish", "песимістично"]):
-        return "📉 Негативний прогноз"
-    return "❔ Нейтрально"
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Бот працює. Новини надсилатимуться автоматично.")
-
-async def news_job(context: ContextTypes.DEFAULT_TYPE):
-    global sent_news_ids
-
-    url = "https://www.forexfactory.com/"
+def parse_news():
+    url = "https://www.investing.com/economic-calendar/"
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
-    rows = soup.select("tr.calendar__row")
+
+    output = []
+    table = soup.find("table", {"id": "economicCalendarData"})
+    if not table:
+        return []
+
+    rows = table.find_all("tr", {"class": "js-event-item"})
 
     for row in rows:
-        id_tag = row.get("data-eventid")
-        if not id_tag or id_tag in sent_news_ids:
-            continue
+        time_tag = row.get("data-event-datetime")
+        currency = row.get("data-event-currency")
+        impact = row.get("data-impact")
+        title = row.find("td", {"class": "event"}).get_text(strip=True)
+        actual = row.get("data-actual")
+        forecast = row.get("data-forecast")
+        previous = row.get("data-previous")
 
-        time_tag = row.select_one("td.time")
-        currency_tag = row.select_one("td.currency")
-        impact_tag = row.select_one("td.impact")
-        title_tag = row.select_one("td.event")
-        forecast_tag = row.select_one("td.forecast")
-        actual_tag = row.select_one("td.actual")
-
-        if not title_tag:
-            continue
-
-        title = title_tag.get_text(strip=True)
-        if not any(key in title.lower() for key in ["eur", "usd", "cpi", "ecb", "inflation", "non-farm", "retail"]):
-            continue
-
-        impact = extract_impact(impact_tag.get("title") if impact_tag else "")
-        sentiment = extract_sentiment(title)
-        forecast = forecast_tag.get_text(strip=True) if forecast_tag else "—"
-        actual = actual_tag.get_text(strip=True) if actual_tag else "—"
-        time_val = time_tag.get_text(strip=True) if time_tag else "—"
-        currency = currency_tag.get_text(strip=True) if currency_tag else "—"
-
-        translated_title = translator.translate(title, dest="uk").text
-        message = (
-            f"🕐 {time_val}
+        if currency in ["EUR", "USD"] and impact == "3":  # high impact only
+            msg = f"🕐 {time_tag[-5:]}
 "
-            f"📊 {currency}: {translated_title}
+            msg += f"📊 {currency}: {title}
 "
-            f"{impact}
+            msg += f"Факт: {actual or '—'} | Прогноз: {forecast or '—'}
 "
-            f"Факт: {actual} | Прогноз: {forecast}
-"
-            f"{sentiment}"
-        )
+            msg += f"📈 {make_prediction(actual, forecast, currency)}"
+            output.append(msg)
+    return output
 
-        await context.bot.send_message(chat_id=CHAT_ID, text=message)
-        sent_news_ids.add(id_tag)
+def make_prediction(actual, forecast, currency):
+    try:
+        a = float(actual.replace('%','').replace(',', '.'))
+        f = float(forecast.replace('%','').replace(',', '.'))
+        if currency == "EUR":
+            if a > f: return "Євро зміцнюється 📈"
+            elif a < f: return "Євро слабшає 📉"
+        if currency == "USD":
+            if a > f: return "Долар зміцнюється 📈"
+            elif a < f: return "Долар слабшає 📉"
+        return "Ринок стабільний 🔍"
+    except:
+        return "Немає повних даних"
 
-def main():
-    logging.basicConfig(level=logging.INFO)
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.job_queue.run_repeating(news_job, interval=300, first=5)  # кожні 5 хвилин
-    app.run_polling()
+def job():
+    news = parse_news()
+    if news:
+        for msg in news:
+            bot.send_message(CHAT_ID, msg)
+    else:
+        bot.send_message(CHAT_ID, "🔔 Поки що важливих новин немає.")
 
-if __name__ == "__main__":
-    main()
+schedule.every(5).minutes.do(job)
+
+while True:
+    schedule.run_pending()
+    time.sleep(1)
