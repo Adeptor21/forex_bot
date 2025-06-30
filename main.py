@@ -5,12 +5,12 @@ import feedparser
 import hashlib
 import time
 import re
+import threading
 
 BOT_TOKEN = "8053411183:AAGPglnG3gQ5-V052RA1e9qqGQR9x8tPMB0"
 CHAT_ID = 843629315
 
 bot = telebot.TeleBot(BOT_TOKEN)
-
 last_sent_ids = set()
 
 RSS_FEEDS = [
@@ -21,12 +21,9 @@ RSS_FEEDS = [
 ]
 
 def clean_text(text):
-    # Видаляємо всі HTML теги
     text = BeautifulSoup(text, "html.parser").get_text()
-    # Видаляємо посилання (http, www)
     text = re.sub(r'http\S+', '', text)
     text = re.sub(r'www\.\S+', '', text)
-    # Видаляємо зайві пробіли та нові рядки
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
@@ -71,7 +68,7 @@ def parse_news():
 
         time_tag = row.get("data-event-datetime")
         currency = row.get("data-event-currency")
-        impact = row.get("data-impact")  # "3"=high, "2"=medium
+        impact = row.get("data-impact")
         title = row.find("td", {"class": "event"}).get_text(strip=True)
         actual = row.get("data-actual")
         forecast = row.get("data-forecast")
@@ -96,6 +93,7 @@ def parse_rss_news():
             title_clean = clean_text(title)
             summary_clean = clean_text(summary)
 
+            # Фільтр по EUR/USD у заголовку
             if not any(sym in title_clean.upper() for sym in ["EUR", "USD", "EUR/USD"]):
                 continue
 
@@ -119,13 +117,24 @@ def job():
         bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
         last_sent_ids.add(nid)
 
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, "Вітаю! Я надсилатиму свіжі новини по парі EUR/USD кожні 5 хвилин.")
+
 def main():
-    while True:
-        try:
-            job()
-        except Exception as e:
-            print(f"Error in job: {e}")
-        time.sleep(300)
+    # Запускаємо цикл новин у фоновому потоці
+    def news_loop():
+        while True:
+            try:
+                job()
+            except Exception as e:
+                print(f"Error in job: {e}")
+            time.sleep(300)
+
+    threading.Thread(target=news_loop, daemon=True).start()
+
+    # Запускаємо Telegram polling
+    bot.polling()
 
 if __name__ == "__main__":
     main()
