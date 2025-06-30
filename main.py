@@ -4,8 +4,8 @@ from bs4 import BeautifulSoup
 import feedparser
 import hashlib
 import time
+import re
 
-# Встав свій токен і chat_id
 BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 CHAT_ID = "YOUR_CHAT_ID"
 
@@ -19,6 +19,12 @@ RSS_FEEDS = [
     "https://www.investing.com/rss/news_25.rss",
     "https://www.instaforex.com/rss/calendar",
 ]
+
+def clean_text(text):
+    text = re.sub(r'http\S+', '', text)
+    text = re.sub(r'www\.\S+', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 def make_prediction(actual, forecast, currency):
     try:
@@ -54,14 +60,3 @@ def parse_news():
 
         time_tag = row.get("data-event-datetime")
         currency = row.get("data-event-currency")
-        impact = row.get("data-impact")  # "3"=high, "2"=medium
-        title = row.find("td", {"class": "event"}).get_text(strip=True)
-        actual = row.get("data-actual")
-        forecast = row.get("data-forecast")
-
-        if currency in ("EUR", "USD") and impact in ("3", "2"):
-            msg = f"🕐 {time_tag[-5:]}\n"
-            msg += f"📊 {currency}: {title}\n"
-            msg += f"Факт: {actual or '—'} | Прогноз: {forecast or '—'}\n"
-            msg += f"📈 {make_prediction(actual, forecast, currency)}"
-            output.append((e
