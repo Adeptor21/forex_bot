@@ -10,7 +10,7 @@ from deep_translator import GoogleTranslator
 
 # --- Налаштування ---
 BOT_TOKEN = "8053411183:AAGPglnG3gQ5-V052RA1e9qqGQR9x8tPMB0"
-CHAT_ID = 843629315
+CHAT_ID = "843629315"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 last_sent_ids = set()
@@ -67,7 +67,7 @@ def format_news_message(title, summary, source=None, impact=None, prediction=Non
     # Формування повідомлення з іконками
     msg = ""
     if source:
-        msg += f"📰 Джерело: {source}\n"
+        msg += f"📰 Джерело: {source}\n\n"
     msg += f"🗞️ *{title_uk}*\n\n"
     msg += f"{short_summary}\n\n"
     if impact:
@@ -118,7 +118,7 @@ def parse_news():
                 title=title,
                 summary=f"Факт: {actual} | Прогноз: {forecast}",
                 source=source,
-                impact=f"Високий" if impact == "3" else "Середній",
+                impact="Високий" if impact == "3" else "Середній",
                 prediction=prediction
             )
             output.append((event_id, msg))
