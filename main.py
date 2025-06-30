@@ -6,8 +6,8 @@ import hashlib
 import time
 import re
 
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+BOT_TOKEN = 8053411183:AAGPglnG3gQ5-V052RA1e9qqGQR9x8tPMB0
+CHAT_ID = 843629315
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
