@@ -8,7 +8,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, JobQu
 
 # Основна конфігурація
 BOT_TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN"
-CHAT_ID = os.getenv("CHAT_ID") or "YOUR_CHAT_ID"
+CHAT_ID = 843629315
 
 # Набір ID новин, щоб не повторювати повідомлення
 sent_news_ids = set()
