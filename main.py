@@ -1,49 +1,24 @@
 import telebot
 import requests
 from bs4 import BeautifulSoup
-import schedule
+import feedparser
+import hashlib
 import time
-from datetime import datetime
 
-# Встав свій токен нижче
-bot = telebot.TeleBot("BOT_TOKEN")
-BOT_TOKEN = 8053411183:AAGPglnG3gQ5-V052RA1e9qqGQR9x8tPMB0
+# Встав свій токен і chat_id
+BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+CHAT_ID = "YOUR_CHAT_ID"
 
-# Встав свій chat_id нижче
-CHAT_ID = 843629315
+bot = telebot.TeleBot(BOT_TOKEN)
 
-def parse_news():
-    url = "https://www.investing.com/economic-calendar/"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(url, headers=headers)
-    soup = BeautifulSoup(r.text, "html.parser")
+last_sent_ids = set()
 
-    output = []
-    table = soup.find("table", {"id": "economicCalendarData"})
-    if not table:
-        return []
-
-    rows = table.find_all("tr", {"class": "js-event-item"})
-
-    for row in rows:
-        time_tag = row.get("data-event-datetime")
-        currency = row.get("data-event-currency")
-        impact = row.get("data-impact")
-        title = row.find("td", {"class": "event"}).get_text(strip=True)
-        actual = row.get("data-actual")
-        forecast = row.get("data-forecast")
-        previous = row.get("data-previous")
-
-        if currency in ["EUR", "USD"] and impact == "3":  # high impact only
-            msg = f"🕐 {time_tag[-5:]}
-"
-            msg += f"📊 {currency}: {title}
-"
-            msg += f"Факт: {actual or '—'} | Прогноз: {forecast or '—'}
-"
-            msg += f"📈 {make_prediction(actual, forecast, currency)}"
-            output.append(msg)
-    return output
+RSS_FEEDS = [
+    "https://www.fxstreet.com/rss/news",
+    "https://www.forexlive.com/feed",
+    "https://www.investing.com/rss/news_25.rss",
+    "https://www.instaforex.com/rss/calendar",
+]
 
 def make_prediction(actual, forecast, currency):
     try:
@@ -59,16 +34,34 @@ def make_prediction(actual, forecast, currency):
     except:
         return "Немає повних даних"
 
-def job():
-    news = parse_news()
-    if news:
-        for msg in news:
-            bot.send_message(CHAT_ID, msg)
-    else:
-        bot.send_message(CHAT_ID, "🔔 Поки що важливих новин немає.")
+def parse_news():
+    url = "https://www.investing.com/economic-calendar/"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(url, headers=headers)
+    soup = BeautifulSoup(r.text, "html.parser")
 
-schedule.every(5).minutes.do(job)
+    output = []
+    table = soup.find("table", {"id": "economicCalendarData"})
+    if not table:
+        return []
 
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+    rows = table.find_all("tr", {"class": "js-event-item"})
+
+    for row in rows:
+        event_id = row.get("data-event-id")
+        if not event_id or event_id in last_sent_ids:
+            continue
+
+        time_tag = row.get("data-event-datetime")
+        currency = row.get("data-event-currency")
+        impact = row.get("data-impact")  # "3"=high, "2"=medium
+        title = row.find("td", {"class": "event"}).get_text(strip=True)
+        actual = row.get("data-actual")
+        forecast = row.get("data-forecast")
+
+        if currency in ("EUR", "USD") and impact in ("3", "2"):
+            msg = f"🕐 {time_tag[-5:]}\n"
+            msg += f"📊 {currency}: {title}\n"
+            msg += f"Факт: {actual or '—'} | Прогноз: {forecast or '—'}\n"
+            msg += f"📈 {make_prediction(actual, forecast, currency)}"
+            output.append((e
