@@ -6,10 +6,11 @@ import time
 from datetime import datetime
 
 # Встав свій токен нижче
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot("BOT_TOKEN")
+BOT_TOKEN = 8053411183:AAGPglnG3gQ5-V052RA1e9qqGQR9x8tPMB0
 
 # Встав свій chat_id нижче
-CHAT_ID = "YOUR_CHAT_ID"
+CHAT_ID = 843629315
 
 def parse_news():
     url = "https://www.investing.com/economic-calendar/"
