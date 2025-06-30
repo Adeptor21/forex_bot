@@ -6,8 +6,8 @@ import hashlib
 import time
 import re
 
-BOT_TOKEN = "8053411183:AAGPglnG3gQ5-V052RA1e9qqGQR9x8tPMB0"
-CHAT_ID = 843629315
+BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+CHAT_ID = "YOUR_CHAT_ID"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -35,14 +35,21 @@ def make_prediction(actual, forecast, currency):
         a = float(actual.replace('%','').replace(',', '.'))
         f = float(forecast.replace('%','').replace(',', '.'))
         if currency == "EUR":
-            if a > f: return "Євро зміцнюється 📈"
-            elif a < f: return "Євро слабшає 📉"
+            if a > f: return "📈 Євро зміцнюється"
+            elif a < f: return "📉 Євро слабшає"
         if currency == "USD":
-            if a > f: return "Долар зміцнюється 📈"
-            elif a < f: return "Долар слабшає 📉"
-        return "Ринок стабільний 🔍"
+            if a > f: return "📈 Долар зміцнюється"
+            elif a < f: return "📉 Долар слабшає"
+        return "🔍 Ринок стабільний"
     except:
-        return "Немає повних даних"
+        return "ℹ️ Немає даних для прогнозу"
+
+def format_news_message(title, summary):
+    sentences = summary.split('. ')
+    short_summary = '. '.join(sentences[:3])
+    if len(short_summary) > 300:
+        short_summary = short_summary[:297] + "..."
+    return f"*{title}*\n\n{short_summary}"
 
 def parse_news():
     url = "https://www.investing.com/economic-calendar/"
@@ -70,10 +77,11 @@ def parse_news():
         forecast = row.get("data-forecast")
 
         if currency in ("EUR", "USD") and impact in ("3", "2"):
+            prediction = make_prediction(actual, forecast, currency)
             msg = f"🕐 {time_tag[-5:]}\n"
-            msg += f"📊 {currency}: {title}\n"
+            msg += f"📊 {currency}: *{title}*\n"
             msg += f"Факт: {actual or '—'} | Прогноз: {forecast or '—'}\n"
-            msg += f"📈 {make_prediction(actual, forecast, currency)}"
+            msg += f"{prediction}"
             output.append((event_id, msg))
     return output
 
@@ -95,10 +103,7 @@ def parse_rss_news():
             if id_hash in last_sent_ids:
                 continue
 
-            if len(summary_clean) > 200:
-                summary_clean = summary_clean[:197] + "..."
-
-            msg = f"📢 {title_clean}\n{summary_clean}"
+            msg = format_news_message(title_clean, summary_clean)
             output.append((id_hash, msg))
     return output
 
@@ -111,7 +116,7 @@ def job():
     new_news = [(nid, msg) for nid, msg in all_news if nid not in last_sent_ids]
 
     for nid, msg in new_news:
-        bot.send_message(CHAT_ID, msg)
+        bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
         last_sent_ids.add(nid)
 
 def main():
