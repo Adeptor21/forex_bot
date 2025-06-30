@@ -6,6 +6,18 @@ import hashlib
 import time
 import re
 
+from telegram import Bot
+import asyncio
+
+async def delete_webhook(bot_token):
+    bot = Bot(bot_token)
+    await bot.delete_webhook(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(delete_webhook(BOT_TOKEN))
+    main()  # твоя основна функція запуску бота
+
 BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 CHAT_ID = "YOUR_CHAT_ID"
 
