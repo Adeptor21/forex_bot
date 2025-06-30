@@ -23,8 +23,6 @@ RSS_FEEDS = [
     "https://www.instaforex.com/rss/calendar",
 ]
 
-# --- Допоміжні функції ---
-
 def clean_text(text):
     text = BeautifulSoup(text, "html.parser").get_text()
     text = re.sub(r'http\S+', '', text)
@@ -38,20 +36,6 @@ def translate_text(text, target_lang="uk"):
     except Exception as e:
         print(f"Translation error: {e}")
         return text
-
-def make_prediction(actual, forecast, currency):
-    try:
-        a = float(actual.replace('%','').replace(',', '.'))
-        f = float(forecast.replace('%','').replace(',', '.'))
-        if currency == "EUR":
-            if a > f: return "📈 Прогноз: Євро зміцнюється"
-            elif a < f: return "📉 Прогноз: Євро слабшає"
-        if currency == "USD":
-            if a > f: return "📈 Прогноз: Долар зміцнюється"
-            elif a < f: return "📉 Прогноз: Долар слабшає"
-        return "🔍 Прогноз: Ринок стабільний"
-    except:
-        return "ℹ️ Прогноз: Немає даних"
 
 def analyze_sentiment(text):
     text_lower = text.lower()
@@ -71,7 +55,6 @@ def analyze_sentiment(text):
 def format_news_message(title, summary, source=None, impact=None, prediction=None, time_str=None):
     title_uk = translate_text(title)
     summary_uk = translate_text(summary)
-
     summary_uk = clean_text(summary_uk)
     sentences = re.split(r'(?<=[.!?]) +', summary_uk)
     short_summary = ' '.join(sentences[:2])
@@ -91,8 +74,6 @@ def format_news_message(title, summary, source=None, impact=None, prediction=Non
     if prediction:
         msg += f"{prediction}\n"
     return msg
-
-# --- Парсер економічного календаря Investing.com ---
 
 def parse_news():
     url = "https://www.investing.com/economic-calendar/"
@@ -115,7 +96,7 @@ def parse_news():
         if not event_id or event_id in last_sent_ids:
             continue
 
-        time_tag = row.get("data-event-datetime")  # ISO format
+        time_tag = row.get("data-event-datetime")
         time_str = time_tag[-8:-3] if time_tag else "—"
 
         currency = row.get("data-event-currency")
@@ -125,7 +106,7 @@ def parse_news():
         forecast = row.get("data-forecast") or "—"
 
         if currency in ("EUR", "USD") and impact in ("3", "2"):
-            prediction = make_prediction(actual, forecast, currency)
+            prediction = f"📈 Прогноз: Факт {actual} проти Прогнозу {forecast}"
             source = "Investing.com"
             msg = format_news_message(
                 title=title,
@@ -137,8 +118,6 @@ def parse_news():
             )
             output.append((event_id, msg))
     return output
-
-# --- Парсер RSS-стрічок ---
 
 def parse_rss_news():
     output = []
@@ -180,8 +159,6 @@ def parse_rss_news():
             output.append((id_hash, msg))
     return output
 
-# --- Основна функція для надсилання новин ---
-
 def job():
     global last_sent_ids
     news_from_calendar = parse_news()
@@ -197,13 +174,9 @@ def job():
         except Exception as e:
             print(f"Error sending message: {e}")
 
-# --- Обробник /start ---
-
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(message, "👋 Вітаю! Я надсилатиму свіжі новини по парі EUR/USD з автоматичним аналізом і прогнозом кожні 5 хвилин.")
-
-# --- Запуск бота та циклу новин ---
 
 def main():
     def news_loop():
