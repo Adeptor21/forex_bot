@@ -8,6 +8,7 @@ import re
 import threading
 from deep_translator import GoogleTranslator
 from dateutil import parser
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- Налаштування ---
 BOT_TOKEN = "8053411183:AAGPglnG3gQ5-V052RA1e9qqGQR9x8tPMB0"
@@ -110,7 +111,6 @@ def parse_news():
         actual = row.get("data-actual") or "—"
         forecast = row.get("data-forecast") or "—"
 
-        # Фільтр по валюті та важливості
         if currency in ("EUR", "USD") and impact in ("3", "2"):
             prediction = f"📈 Прогноз: Факт {actual} проти Прогнозу {forecast}"
             source = "Investing.com"
@@ -169,8 +169,6 @@ def job():
     all_news = news_from_calendar + news_from_rss
     new_news = [(nid, msg, t) for (nid, msg, t) in all_news if nid not in last_sent_ids]
     new_news = [item for item in new_news if item[2] is not None]
-
-    # Сортуємо за часом публікації (найстаріші - першими)
     new_news.sort(key=lambda x: x[2], reverse=False)
 
     for nid, msg, _ in new_news:
@@ -182,7 +180,35 @@ def job():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "👋 Вітаю! Я надсилатиму свіжі новини по парі EUR/USD з автоматичним аналізом і прогнозом кожні 5 хвилин.")
+    markup = InlineKeyboardMarkup()
+    button = InlineKeyboardButton("Отримати новини", callback_data="get_news")
+    markup.add(button)
+    bot.send_message(message.chat.id,
+                     "👋 Вітаю! Я надсилатиму свіжі новини по парі EUR/USD з автоматичним аналізом і прогнозом. Натисни кнопку нижче, щоб отримати свіжі новини прямо зараз.",
+                     reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "get_news")
+def callback_get_news(call):
+    bot.answer_callback_query(call.id, "Отримую новини...")
+
+    news_from_calendar = parse_news()
+    news_from_rss = parse_rss_news()
+
+    all_news = news_from_calendar + news_from_rss
+    new_news = [(nid, msg, t) for (nid, msg, t) in all_news if nid not in last_sent_ids]
+    new_news = [item for item in new_news if item[2] is not None]
+    new_news.sort(key=lambda x: x[2], reverse=False)
+
+    if not new_news:
+        bot.send_message(call.message.chat.id, "❗ Новин поки що немає.")
+        return
+
+    for nid, msg, _ in new_news:
+        try:
+            bot.send_message(call.message.chat.id, msg, parse_mode="Markdown")
+            last_sent_ids.add(nid)
+        except Exception as e:
+            print(f"Error sending message: {e}")
 
 def main():
     def news_loop():
