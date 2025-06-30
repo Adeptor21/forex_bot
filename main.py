@@ -78,17 +78,17 @@ def format_news_message(title, summary, source=None, impact=None, prediction=Non
 def parse_news():
     url = "https://www.investing.com/economic-calendar/"
     headers = {"User-Agent": "Mozilla/5.0"}
+    output = []
     try:
         r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
     except Exception as e:
         print(f"Error fetching calendar: {e}")
-        return []
+        return output
 
-    output = []
     table = soup.find("table", {"id": "economicCalendarData"})
     if not table:
-        return []
+        return output
 
     rows = table.find_all("tr", {"class": "js-event-item"})
     for row in rows:
@@ -97,7 +97,12 @@ def parse_news():
             continue
 
         time_tag = row.get("data-event-datetime")
-        time_str = time_tag[-8:-3] if time_tag else "—"
+        try:
+            time_obj = parser.parse(time_tag) if time_tag else None
+            time_str = time_obj.strftime("%Y-%m-%d %H:%M") if time_obj else "—"
+        except:
+            time_obj = None
+            time_str = "—"
 
         currency = row.get("data-event-currency")
         impact = row.get("data-impact")
@@ -105,6 +110,7 @@ def parse_news():
         actual = row.get("data-actual") or "—"
         forecast = row.get("data-forecast") or "—"
 
+        # Фільтр по валюті та важливості
         if currency in ("EUR", "USD") and impact in ("3", "2"):
             prediction = f"📈 Прогноз: Факт {actual} проти Прогнозу {forecast}"
             source = "Investing.com"
@@ -116,7 +122,7 @@ def parse_news():
                 prediction=prediction,
                 time_str=time_str
             )
-            output.append((event_id, msg))
+            output.append((event_id, msg, time_obj))
     return output
 
 def parse_rss_news():
@@ -141,22 +147,18 @@ def parse_rss_news():
                 continue
 
             published = getattr(entry, 'published', None)
-            if published:
-                try:
-                    dt = parser.parse(published)
-                    time_str = dt.strftime("%Y-%m-%d %H:%M")
-                except:
-                    time_str = None
-            else:
-                time_str = None
+            try:
+                time_obj = parser.parse(published) if published else None
+            except:
+                time_obj = None
 
             source = re.findall(r'https?://(?:www\.)?([^/]+)/', feed_url)
             source_name = source[0] if source else "Новини"
 
             prediction = analyze_sentiment(summary)
 
-            msg = format_news_message(title, summary, source=source_name, time_str=time_str, prediction=prediction)
-            output.append((id_hash, msg))
+            msg = format_news_message(title, summary, source=source_name, time_str=(time_obj.strftime("%Y-%m-%d %H:%M") if time_obj else None), prediction=prediction)
+            output.append((id_hash, msg, time_obj))
     return output
 
 def job():
@@ -165,9 +167,13 @@ def job():
     news_from_rss = parse_rss_news()
 
     all_news = news_from_calendar + news_from_rss
-    new_news = [(nid, msg) for nid, msg in all_news if nid not in last_sent_ids]
+    new_news = [(nid, msg, t) for (nid, msg, t) in all_news if nid not in last_sent_ids]
+    new_news = [item for item in new_news if item[2] is not None]
 
-    for nid, msg in new_news:
+    # Сортуємо за часом публікації (найстаріші - першими)
+    new_news.sort(key=lambda x: x[2], reverse=False)
+
+    for nid, msg, _ in new_news:
         try:
             bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
             last_sent_ids.add(nid)
@@ -185,7 +191,7 @@ def main():
                 job()
             except Exception as e:
                 print(f"Error in job: {e}")
-            time.sleep(300)
+            time.sleep(300)  # 5 хвилин
 
     threading.Thread(target=news_loop, daemon=True).start()
     bot.polling()
